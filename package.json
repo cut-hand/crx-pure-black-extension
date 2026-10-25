@@ -1,0 +1,12 @@
+{
+  "name": "crx-pure-black-extension",
+  "version": "1.8.0",
+  "private": true,
+  "description": "Pure Black — custom webpage colors and readable contrast for Chrome and Edge",
+  "scripts": {
+    "test": "node qa/browser-qa.cjs",
+    "test:music": "node qa/music-qa.cjs",
+    "test:youdao": "node qa/youdao-qa.cjs"
+  },
+  "devDependencies": { "playwright": "1.62.1" }
+}
