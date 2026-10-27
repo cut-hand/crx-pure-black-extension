@@ -15,6 +15,9 @@ html[data-pb-measuring] *, html[data-pb-measuring] *::before, html[data-pb-measu
 [data-pb-border] { border-color: var(--pb-border, #50535a) !important; }
 [data-pb-shadow] { box-shadow: none !important; text-shadow: none !important; }
 :is(#__pb1#__pb2#__pb3, [data-pb-wallpaper]) { background-image: none !important; background-color: var(--pb-background, #000000) !important; }
+:is(#__pb1#__pb2#__pb3, [data-pb-gradient]) { background-image:none!important; }
+:is(#__pb1#__pb2#__pb3, [data-pb-before-gradient])::before,
+:is(#__pb1#__pb2#__pb3, [data-pb-after-gradient])::after { background-image:none!important; }
 :is(#__pb1#__pb2#__pb3, [data-pb-border-top]) { border-top-color: var(--pb-border, #50535a) !important; }
 :is(#__pb1#__pb2#__pb3, [data-pb-arrow-top]) { border-top-color: var(--pb-arrow-top, var(--pb-foreground, #e8e8e8)) !important; }
 :is(#__pb1#__pb2#__pb3, [data-pb-border-right]) { border-right-color: var(--pb-border, #50535a) !important; }

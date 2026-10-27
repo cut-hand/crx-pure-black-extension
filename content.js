@@ -5,7 +5,7 @@
   const originalVariables = new Map();
   const themeVariables = ['--pb-background','--pb-foreground','--pb-border','--pb-color-scheme'];
   const siteKey = `site:${location.hostname}`;
-  const attrs = ['data-pb-bg', 'data-pb-fg', 'data-pb-border', 'data-pb-shadow', 'data-pb-fill', 'data-pb-before', 'data-pb-after', 'data-pb-before-bg', 'data-pb-after-bg', 'data-pb-svg', 'data-pb-wallpaper', 'data-pb-region', 'data-pb-icon', 'data-pb-raster'];
+  const attrs = ['data-pb-bg', 'data-pb-fg', 'data-pb-border', 'data-pb-shadow', 'data-pb-fill', 'data-pb-before', 'data-pb-after', 'data-pb-before-bg', 'data-pb-after-bg', 'data-pb-svg', 'data-pb-wallpaper', 'data-pb-region', 'data-pb-icon', 'data-pb-raster', 'data-pb-gradient', 'data-pb-before-gradient', 'data-pb-after-gradient'];
   for (const pseudo of ['', '-before', '-after']) for (const side of ['top', 'right', 'bottom', 'left']) {
     attrs.push(`data-pb${pseudo}-border-${side}`, `data-pb${pseudo}-arrow-${side}`);
   }
@@ -69,6 +69,12 @@
   }
   function foreground(bg) {
     return PureBlackTheme.contrast(PureBlackTheme.rgb('#202124'),bg)>PureBlackTheme.contrast(PureBlackTheme.rgb('#e8e8e8'),bg)?'#202124':'#e8e8e8';
+  }
+  function neutralGradient(style) {
+    if(!style.backgroundImage.includes('gradient(')||style.backgroundImage.includes('url(')||style.backgroundClip.includes('text'))return false;
+    const stops=(style.backgroundImage.match(/(?:rgba?|oklch|oklab|lab|lch|color)\([^)]*\)/g)||[]).map(color);
+    const visible=stops.filter(c=>c&&c.a>.05);
+    return visible.length>0&&stops.every(c=>c&&(c.a<=.05||neutral(c)));
   }
   function visibleBackground(style,parentBg,changeBg,wallpaper=false) {
     if(changeBg||wallpaper) return {bg:palette.bg,known:true};
@@ -184,13 +190,15 @@
       // Youdao uses a pale decorative PNG across the translation workspace.
       // Treat only that known wallpaper as a surface; keep actual media intact.
       const wallpaper = location.hostname === 'fanyi.youdao.com' && el.matches('.web-frame-content-scroll-container.index-bg');
-      const hasImage = style.backgroundImage !== 'none' && !wallpaper;
+      const flattenGradient=neutralGradient(style);
+      const hasImage = style.backgroundImage !== 'none' && !wallpaper && !flattenGradient;
       const parent = svgText ? el.closest('svg').parentElement : el.parentElement;
       const parentSurface=surface.get(parent)||{bg:palette.bg,known:true};
       const parentOriginal=originalSurface.get(parent)||palette.bg;
       originalSurface.set(el,composite(bg,parentOriginal));
       const flags = [], paints=[];
-      const changeBg=neutral(bg)&&bg.a>.05&&!hasImage;
+      const changeBg=flattenGradient||(neutral(bg)&&bg.a>.05&&!hasImage);
+      if(flattenGradient)flags.push('data-pb-gradient');
       if (wallpaper) flags.push('data-pb-wallpaper', 'data-pb-bg');
       if (changeBg) flags.push(attrs[0]);
       const resolved=visibleBackground(style,parentSurface.bg,changeBg,wallpaper);
@@ -225,8 +233,12 @@
         const ps = getComputedStyle(el, `::${pseudo}`);
         if (ps.content === 'none' || ps.content === 'normal') continue;
         const pb = color(ps.backgroundColor);
-        const pseudoImage = ps.backgroundImage !== 'none';
+        const pseudoGradient=neutralGradient(ps);
+        const pseudoImage = ps.backgroundImage !== 'none'&&!pseudoGradient;
+        // Fade overlays must remain transparent after removing the gradient;
+        // an opaque replacement would cover carousel cards and their labels.
         const pseudoChange = !pseudoImage && neutral(pb) && pb.a > .05;
+        if(pseudoGradient)flags.push(`data-pb-${pseudo}-gradient`);
         if (pseudoChange) flags.push(`data-pb-${pseudo}-bg`);
         const pseudoSurface=visibleBackground(ps,resolved.bg,pseudoChange);
         if(pseudoSurface.known&&(needsLight(color(ps.color),pseudoSurface.bg)||needsLight(color(ps.webkitTextFillColor),pseudoSurface.bg))) {
@@ -292,7 +304,7 @@
         clearTimeout(reloadTimer); reloadTimer=null;
         void chrome.storage.local.get(['preferences',siteKey]).then(values => {
           update({...values,preferences:message.preferences},true);
-          sendResponse({ok:true,version:'1.8.0',active,background:palette.background});
+          sendResponse({ok:true,version:'1.8.1',active,background:palette.background});
         });
         return true;
       }

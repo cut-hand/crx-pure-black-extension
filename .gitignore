@@ -10,4 +10,5 @@ qa/*.jpg
 qa/*.webm
 qa/*.mp4
 qa/*surfaces.json
+qa/*gradients.json
 qa/*demo.html

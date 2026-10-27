@@ -26,6 +26,13 @@ const root = path.resolve(__dirname,'..');
     <button id="gradient-button" style="background:linear-gradient(90deg,#ffe8d2,#ffd5b0);color:#e8e8e8"><span id="gradient-button-text">Gradient membership</span></button>
     <button id="yellow" style="background:#ffff99;color:inherit"><span id="yellow-text">Inherited dark text</span></button>
     <div id="white-region" style="background:#fff;border-radius:12px;width:500px;height:100px;padding:16px"><span id="region-text">Separate white card</span></div>`);
+    await page.addStyleTag({content:`
+      #neutral-gradient{background:linear-gradient(transparent,#222);height:80px}
+      #pseudo-gradient::before{content:'';display:block;height:80px;background:linear-gradient(#eee,#222)}
+      #gradient-text{background:linear-gradient(#eee,#111);background-clip:text;color:transparent}
+      #layered-gradient{background-image:linear-gradient(#eee,#111),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E")}
+    `});
+    await page.evaluate(()=>{for(const id of ['neutral-gradient','pseudo-gradient','gradient-text','layered-gradient']){const el=document.createElement('div');el.id=id;el.textContent='Gradient sample';document.body.append(el);}});
     const originalRegion=await page.locator('#white-region').boundingBox();
     await page.evaluate(()=>{
       for(const transparent of [true,false]) {
@@ -52,6 +59,11 @@ const root = path.resolve(__dirname,'..');
     await page.waitForSelector('[data-pb-active]');
     const style=(id,prop,pseudo=null)=>page.$eval(id,(el,{prop,pseudo})=>getComputedStyle(el,pseudo)[prop],{prop,pseudo});
     assert.equal(await style('body','backgroundColor'),'rgb(0, 0, 0)');
+    assert.equal(await style('#neutral-gradient','backgroundImage'),'none');
+    assert.equal(await style('#neutral-gradient','backgroundColor'),'rgb(0, 0, 0)');
+    assert.equal(await style('#pseudo-gradient','backgroundImage','::before'),'none');
+    assert.equal(await style('#pseudo-gradient','backgroundColor','::before'),'rgba(0, 0, 0, 0)');
+    for(const id of ['#gradient-button','#gradient-text','#layered-gradient'])assert.match(await style(id,'backgroundImage'),/gradient/);
     for(const id of ['#arrow','#dark-arrow']) {
       assert.equal(await style(id,'borderLeftColor'),'rgba(0, 0, 0, 0)');
       assert.equal(await style(id,'borderBottomColor'),'rgba(0, 0, 0, 0)');
@@ -81,6 +93,8 @@ const root = path.resolve(__dirname,'..');
     assert.equal(await style('#dark-arrow','borderTopColor'),'rgb(34, 34, 34)');
     assert.equal(await style('#pseudo','borderTopColor','::after'),'rgb(34, 34, 34)');
     assert.equal(await style('body','backgroundColor'),'rgb(255, 255, 255)');
+    assert.match(await style('#neutral-gradient','backgroundImage'),/gradient/);
+    assert.match(await style('#pseudo-gradient','backgroundImage','::before'),/gradient/);
     assert.equal(await style('#dark-png','filter'),'none');
     assert.equal(await style('#white-region','outlineStyle'),'none');
     assert.equal(await style('#peach-text','color'),'rgb(232, 232, 232)');
@@ -96,6 +110,8 @@ const root = path.resolve(__dirname,'..');
     await page.evaluate(()=>update({enabled:true,background:'#0d1522'}));
     await page.waitForFunction(()=>getComputedStyle(document.body).backgroundColor==='rgb(13, 21, 34)');
     assert.equal(await style('#card','backgroundColor'),'rgb(13, 21, 34)');
+    assert.equal(await style('#neutral-gradient','backgroundColor'),'rgb(13, 21, 34)');
+    assert.equal(await style('#pseudo-gradient','backgroundColor','::before'),'rgba(0, 0, 0, 0)');
     assert.equal(await style('#green','backgroundColor'),'rgb(0, 128, 0)');
     await page.evaluate(()=>update({enabled:true,background:'#eeeeee'}));
     await page.waitForFunction(()=>getComputedStyle(document.body).backgroundColor==='rgb(238, 238, 238)');

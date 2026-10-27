@@ -28,7 +28,7 @@ function savePreferences() {
     if (tabId === null || !siteKey) { $('status').textContent='已保存，普通网页中生效'; return; }
     try {
       const result = await chrome.tabs.sendMessage(tabId,{type:'pb-preview',preferences:snapshot},{frameId:0});
-      $('status').textContent = result?.version === '1.8.0' ? '已应用到当前网页' : '已保存，请刷新网页以应用新版配色';
+      $('status').textContent = result?.version === '1.8.1' ? '已应用到当前网页' : '已保存，请刷新网页以应用新版配色';
     } catch { $('status').textContent='已保存，请刷新网页以应用新版配色'; }
   }).catch(() => { $('status').textContent = '保存失败，请重新打开扩展再试'; }).finally(() => { pendingWrites--; });
   return writeQueue;

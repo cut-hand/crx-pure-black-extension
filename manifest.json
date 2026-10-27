@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "纯黑浏览 · Pure Black",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "自定义网页背景色与黑色程度，提供一键预设、文字对比度适配和网站开关。",
   "permissions": ["storage", "activeTab"],
   "background": { "service_worker": "background.js" },
