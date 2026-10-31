@@ -28,7 +28,7 @@ function savePreferences() {
     if (tabId === null || !siteKey) { $('status').textContent='已保存，普通网页中生效'; return; }
     try {
       const result = await chrome.tabs.sendMessage(tabId,{type:'pb-preview',preferences:snapshot},{frameId:0});
-      $('status').textContent = result?.version === '1.8.1' ? '已应用到当前网页' : '已保存，请刷新网页以应用新版配色';
+      $('status').textContent = result?.version === '1.8.2' ? '已应用到当前网页' : '已保存，请刷新网页以应用新版配色';
     } catch { $('status').textContent='已保存，请刷新网页以应用新版配色'; }
   }).catch(() => { $('status').textContent = '保存失败，请重新打开扩展再试'; }).finally(() => { pendingWrites--; });
   return writeQueue;
@@ -85,7 +85,8 @@ async function init() {
   if (chrome.commands?.getAll) {
     const commands = await chrome.commands.getAll();
     const shortcut = commands.find(command => command.name === 'toggle-pure-black')?.shortcut;
-    $('shortcut-status').textContent = shortcut ? `${shortcut} · 设置快捷键` : '浏览器快捷键未绑定 · 点击设置';
+    $('shortcut-status').textContent = shortcut || '未绑定';
+    $('shortcut-status').setAttribute('aria-label', shortcut ? `快捷键 ${shortcut}，点击设置` : '浏览器快捷键未绑定，点击设置');
   }
   for (const button of document.querySelectorAll('.swatch')) button.addEventListener('click', () => setBackground(button.dataset.color));
   $('background-color').addEventListener('input', event => setBackground(event.target.value));

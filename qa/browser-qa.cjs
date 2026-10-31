@@ -175,7 +175,7 @@ const root = path.resolve(__dirname,'..');
       await asset.evaluate(()=>document.documentElement.setAttribute('viewBox','12 11 104 98'));
       await asset.screenshot({path:path.join(root,`icons/${face}-${size}.png`),omitBackground:true});
     }
-    const popup = await browser.newPage({viewport:{width:370,height:700},deviceScaleFactor:2});
+    const popup = await browser.newPage({viewport:{width:330,height:700},deviceScaleFactor:2});
     await popup.exposeFunction('saveToContentPage',async values=>page.evaluate(values=>{
       Object.assign(window.values,values);
       for(const fn of listeners)fn(Object.fromEntries(Object.entries(values).map(([k,v])=>[k,{newValue:v}])),'local');
@@ -183,18 +183,21 @@ const root = path.resolve(__dirname,'..');
     await popup.exposeFunction('sendToContentPage',async message=>page.evaluate(message=>new Promise(resolve=>messageListeners[0](message,{id:'test-extension'},resolve)),message));
     popup.on('pageerror',e=>errors.push(e.message));
     await popup.addInitScript(()=>{
-      window.saved={};window.changeListeners=[];
+      window.saved={};window.changeListeners=[];window.testShortcut=new URL(location.href).searchParams.get('shortcut')||'';
       window.opened=[];
-      window.chrome={commands:{getAll:async()=>[{name:'toggle-pure-black',shortcut:''}]},tabs:{sendMessage:async(id,message)=>sendToContentPage(message),create:async value=>opened.push(value),query:async()=>[{id:1,url:'https://github.com/user/project'}]},storage:{local:{get:async()=>saved,set:async values=>{Object.assign(saved,values);await saveToContentPage(values);for(const fn of changeListeners)fn(Object.fromEntries(Object.entries(values).map(([k,v])=>[k,{newValue:v}])),'local');}},onChanged:{addListener:fn=>changeListeners.push(fn)}}};
+      window.chrome={commands:{getAll:async()=>[{name:'toggle-pure-black',shortcut:window.testShortcut}]},tabs:{sendMessage:async(id,message)=>sendToContentPage(message),create:async value=>opened.push(value),query:async()=>[{id:1,url:'https://github.com/user/project'}]},storage:{local:{get:async()=>saved,set:async values=>{Object.assign(saved,values);await saveToContentPage(values);for(const fn of changeListeners)fn(Object.fromEntries(Object.entries(values).map(([k,v])=>[k,{newValue:v}])),'local');}},onChanged:{addListener:fn=>changeListeners.push(fn)}}};
     });
     await popup.goto(pathToFileURL(path.join(root,'popup.html')).href);
     await popup.waitForFunction(()=>document.querySelector('#host').textContent==='github.com');
     await popup.locator('#mascot').evaluate(img=>img.decode());
     const brandLayout=await popup.evaluate(()=>{const logo=document.querySelector('#mascot').getBoundingClientRect(),title=document.querySelector('h1').getBoundingClientRect();return {logoRight:logo.right,titleLeft:title.left,overlap:logo.bottom>title.top&&logo.top<title.bottom};});
     assert.ok(brandLayout.logoRight<brandLayout.titleLeft&&brandLayout.overlap,'Logo must sit to the left of the title');
+    const shortcutLayout=await popup.evaluate(()=>{const logo=document.querySelector('#mascot').getBoundingClientRect(),key=document.querySelector('#shortcut-status').getBoundingClientRect();return {aligned:Math.abs((logo.top+logo.bottom-key.top-key.bottom)/2)<1,right:key.right,scroll:document.body.scrollWidth};});
+    assert.ok(shortcutLayout.aligned&&shortcutLayout.right<=330&&shortcutLayout.scroll===330,'Shortcut must align with the mascot without horizontal overflow');
     const height=await popup.evaluate(()=>document.body.scrollHeight);
     assert.ok(height<=600,`Popup height ${height} exceeds Chromium's 600px limit`);
-    await popup.setViewportSize({width:370,height});
+    await popup.setViewportSize({width:330,height});
+    await popup.waitForTimeout(200);
     await popup.screenshot({path:'qa/popup-on.png',animations:'disabled',scale:'css'});
     assert.equal(await popup.$eval('#mascot',el=>el.getAttribute('src')),'icons/awake.svg');
     await popup.uncheck('#enabled');
@@ -243,6 +246,16 @@ const root = path.resolve(__dirname,'..');
     await popup.waitForFunction(()=>document.querySelector('#host').textContent==='github.com');
     assert.equal(await popup.locator('#hex-color').inputValue(),'#000000');
     assert.match(await popup.locator('#shortcut-status').textContent(),/未绑定/);
+    for(const shortcut of ['Alt+Shift+D','⌥⇧D']) {
+      await popup.goto(`${pathToFileURL(path.join(root,'popup.html')).href}?shortcut=${encodeURIComponent(shortcut)}`);
+      await popup.waitForFunction(shortcut=>document.querySelector('#shortcut-status').textContent===shortcut,shortcut);
+      assert.equal(await popup.locator('#shortcut-status').textContent(),shortcut);
+      const fits=await popup.evaluate(()=>{const button=document.querySelector('#shortcut-status').getBoundingClientRect(),title=document.querySelector('.hero-title').getBoundingClientRect();return button.left>=title.right&&button.right<=330&&document.body.scrollWidth===330;});
+      assert.ok(fits,`Platform shortcut ${shortcut} must fit the compact popup`);
+      await popup.waitForTimeout(200);
+      await popup.screenshot({path:shortcut.includes('Alt')?'qa/popup-windows.png':'qa/popup-mac.png',animations:'disabled',scale:'css'});
+    }
+
     await popup.locator('#shortcut-status').click();
     assert.equal(await popup.evaluate(()=>opened.at(-1).url),'chrome://extensions/shortcuts');
     await popup.uncheck('#site');

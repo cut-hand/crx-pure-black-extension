@@ -1,17 +1,14 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>纯黑浏览</title><link rel="stylesheet" href="popup.css"></head>
 <body>
-  <header><div class="wordmark">PURE BLACK<span class="version">1.8.1</span></div><button class="shortcut shortcut-settings" title="设置浏览器快捷键" type="button">Alt ⇧ D</button></header>
   <main>
-    <section class="hero"><div class="moon-halo"><img id="mascot" src="icons/awake.svg" width="104" height="104" alt="睁眼的小月亮"></div><div class="hero-title"><h1>纯黑浏览</h1><span id="state-pill">已开启</span></div><p id="state-description">让页面安静下来，让黑色回到纯黑。</p></section>
+    <section class="hero"><div class="moon-halo"><img id="mascot" src="icons/awake.svg" width="104" height="104" alt="睁眼的小月亮"></div><div class="hero-title"><h1>纯黑浏览</h1><span id="state-pill">已开启</span></div><button id="shortcut-status" class="shortcut shortcut-settings" title="设置浏览器快捷键" aria-label="设置浏览器快捷键" type="button">快捷键</button><p id="state-description">让页面安静下来，让黑色回到纯黑。</p></section>
     <div class="glass settings">
       <label class="row primary"><span><strong>启用页面配色</strong><small>保留图片与彩色内容</small></span><input class="switch" id="enabled" type="checkbox" role="switch"></label>
     </div>
-    <div class="section-label">浏览偏好</div>
     <div class="glass preferences">
       <label class="row"><span><strong>在此网站启用</strong><small id="host">正在读取…</small></span><input class="switch" id="site" type="checkbox" role="switch"></label>
     </div>
-    <div class="section-label">背景调色盘</div>
     <section class="glass palette" aria-label="背景调色盘">
       <div class="swatches" role="group" aria-label="预设背景色">
         <button type="button" class="swatch" data-color="#000000" aria-label="纯黑" title="纯黑" aria-pressed="true"></button>
@@ -26,8 +23,7 @@
       <input id="darkness" type="range" min="0" max="100" value="100" aria-label="黑色程度">
       <div class="range-labels"><span>明亮</span><span>深黑</span></div>
     </section>
-    <p id="status" role="status" aria-live="polite">设置自动保存</p>
+    <p id="status" class="sr-only" role="status" aria-live="polite"></p>
   </main>
-  <footer><span class="footer-dot"></span><button id="shortcut-status" class="shortcut-settings" type="button">Alt + Shift + D · 设置快捷键</button></footer>
   <script src="theme.js"></script><script src="popup.js"></script>
 </body></html>

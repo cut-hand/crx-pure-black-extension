@@ -1,0 +1,2 @@
+89cbee32d8abb83929aae0fc95e7984ec089ef0706ff1d1bad10bb78dfc4947c  Pure-Black-1.8.2.zip
+e5ade22980f51445e59c45ae8f7492bd318940ffd017bc9478c344b20dc7b130  Chrome-Web-Store-1.8.2-materials.zip

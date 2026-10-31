@@ -5,16 +5,23 @@
   const originalVariables = new Map();
   const themeVariables = ['--pb-background','--pb-foreground','--pb-border','--pb-color-scheme'];
   const siteKey = `site:${location.hostname}`;
+  const youtubeHost = /(^|\.)youtube(?:-nocookie)?\.com$/.test(location.hostname);
+  // Embedded YouTube controls can be siblings of the video player. Treat the
+  // entire embed document as media so paused/hover overlays also stay intact.
+  const youtubeEmbed = youtubeHost && /^\/embed(?:\/|$)/.test(location.pathname);
   const attrs = ['data-pb-bg', 'data-pb-fg', 'data-pb-border', 'data-pb-shadow', 'data-pb-fill', 'data-pb-before', 'data-pb-after', 'data-pb-before-bg', 'data-pb-after-bg', 'data-pb-svg', 'data-pb-wallpaper', 'data-pb-region', 'data-pb-icon', 'data-pb-raster', 'data-pb-gradient', 'data-pb-before-gradient', 'data-pb-after-gradient'];
   for (const pseudo of ['', '-before', '-after']) for (const side of ['top', 'right', 'bottom', 'left']) {
     attrs.push(`data-pb${pseudo}-border-${side}`, `data-pb${pseudo}-arrow-${side}`);
   }
   const skip = 'img,video,audio,canvas,svg,svg *,picture,iframe,object,embed,script,style,link,meta,source';
   let settings = { ...defaults }, active = false, observer, timer, lastScan = 0;
-  const marked = new Set();
+  const marked = new Map();
   const localStyles = new Map();
   const outlineImages = new Map();
   const rasterSamples=new WeakMap();
+  const colorCache=new Map();
+  const contrastCache=new Map(), foregroundCache=new Map();
+  const darkText=PureBlackTheme.rgb('#202124'), lightText=PureBlackTheme.rgb('#e8e8e8');
   function sampleRaster(image) {
     const source=image.currentSrc||image.src,cached=rasterSamples.get(image);
     if(cached?.source===source)return cached.samples;
@@ -31,7 +38,7 @@
   }
   let transitionTarget=null, transitionValues=null;
   function update(values,animate=false) {
-    const target=(values.preferences?.enabled??true)&&values[siteKey]!==false;
+    const target=(values.preferences?.enabled??true)&&values[siteKey]!==false&&!youtubeEmbed;
     if(transitionTarget!==null&&target===transitionTarget){transitionValues=values;return;}
     if((animate&&target!==active)||transitionTarget!==null) {
       transitionTarget=target;transitionValues=values;
@@ -42,6 +49,10 @@
   }
   let colorContext;
   function color(value) {
+    if(colorCache.has(value))return colorCache.get(value);
+    const parsed=parseColor(value);colorCache.set(value,parsed);return parsed;
+  }
+  function parseColor(value) {
     const m = value.match(/^rgba?\(([^)]+)\)$/);
     if (!m) {
       // Modern sites can return oklch(), lab() or color(display-p3 ...) from
@@ -65,16 +76,35 @@
   }
   function needsLight(c, bg = palette.bg) {
     if (!c || c.a <= .05) return false;
-    return PureBlackTheme.contrast(composite(c,bg),bg) < 4.5;
+    const key=`${c.r},${c.g},${c.b},${c.a}|${bg.r},${bg.g},${bg.b}`;
+    if(!contrastCache.has(key))contrastCache.set(key,PureBlackTheme.contrast(composite(c,bg),bg)<4.5);
+    return contrastCache.get(key);
   }
   function foreground(bg) {
-    return PureBlackTheme.contrast(PureBlackTheme.rgb('#202124'),bg)>PureBlackTheme.contrast(PureBlackTheme.rgb('#e8e8e8'),bg)?'#202124':'#e8e8e8';
+    const key=`${bg.r},${bg.g},${bg.b}`;
+    if(!foregroundCache.has(key))foregroundCache.set(key,PureBlackTheme.contrast(darkText,bg)>PureBlackTheme.contrast(lightText,bg)?'#202124':'#e8e8e8');
+    return foregroundCache.get(key);
   }
   function neutralGradient(style) {
     if(!style.backgroundImage.includes('gradient(')||style.backgroundImage.includes('url(')||style.backgroundClip.includes('text'))return false;
     const stops=(style.backgroundImage.match(/(?:rgba?|oklch|oklab|lab|lch|color)\([^)]*\)/g)||[]).map(color);
     const visible=stops.filter(c=>c&&c.a>.05);
     return visible.length>0&&stops.every(c=>c&&(c.a<=.05||neutral(c)));
+  }
+  function surfaceWallpaper(el, style) {
+    if (location.hostname === 'fanyi.youdao.com') return el.matches('.web-frame-content-scroll-container.index-bg');
+    if (location.hostname !== 'music.163.com') return false;
+    // NetEase paints its columns and several panels with light PNG skins.
+    // Match both the surface and its asset, since the same sprite also holds
+    // colored controls and icons that must remain intact.
+    const image = style.backgroundImage;
+    if (el.matches('.g-bd1,.g-bd2,.g-bd3,.g-bd4,.g-bd5,.g-bd6,.g-bd10')) {
+      return /^url\("https?:\/\/s[\d]+\.music\.126\.net\/style\/web2\/img\/frame\/wrap(?:[1-6]|10)\.png(?:\?[^"\s]*)?"\)$/.test(image);
+    }
+    if (el.matches('.n-myinfo')) return /^url\("https?:\/\/s[\d]+\.music\.126\.net\/style\/web2\/img\/index\/index\.png(?:\?[^"\s]*)?"\)$/.test(image);
+    if (el.matches('.n-bilst')) return /^url\("https?:\/\/s[\d]+\.music\.126\.net\/style\/web2\/img\/index\/index_bill\.png(?:\?[^"\s]*)?"\)$/.test(image);
+    if (el.matches('.m-table th,.m-table th .wp,.m-table td')) return /^url\("https?:\/\/s[\d]+\.music\.126\.net\/style\/web2\/img\/table\.png(?:\?[^"\s]*)?"\)$/.test(image);
+    return false;
   }
   function visibleBackground(style,parentBg,changeBg,wallpaper=false) {
     if(changeBg||wallpaper) return {bg:palette.bg,known:true};
@@ -106,12 +136,14 @@
   }
   function borders(style, flags, blackSurface, pseudo = '', bg = palette.bg, paints = []) {
     const sides = ['top', 'right', 'bottom', 'left'];
-    const colors = sides.map(side => color(style.getPropertyValue(`border-${side}-color`)));
+    const widths = sides.map(side => parseFloat(style.getPropertyValue(`border-${side}-width`)));
+    if(!widths.some(width=>width>0))return;
     const triangle = parseFloat(style.width) === 0 && parseFloat(style.height) === 0 &&
-      sides.some(side => parseFloat(style.getPropertyValue(`border-${side}-width`)) > 0);
+      widths.some(width=>width>0);
     for (let i = 0; i < sides.length; i++) {
-      const c = colors[i], side = sides[i];
-      if (!c || c.a <= .05 || parseFloat(style.getPropertyValue(`border-${side}-width`)) === 0) continue;
+      if(widths[i]===0)continue;
+      const side = sides[i], c = color(style.getPropertyValue(`border-${side}-color`));
+      if (!c || c.a <= .05) continue;
       // A CSS triangle depends on transparent borders. Never overwrite all four
       // edges with one border-color; only adjust its painted edge for contrast.
       if (triangle) {
@@ -126,7 +158,7 @@
       if(value) el.style.setProperty(name,value,priority); else el.style.removeProperty(name);
     }
     localStyles.clear();
-    for (const el of marked) for (const attr of attrs) el.removeAttribute(attr);
+    for (const [el,flags] of marked) for (const attr of flags) el.removeAttribute(attr);
     marked.clear();
   }
   function applyPaints(el,paints) {
@@ -141,7 +173,10 @@
   function scan() {
     timer = null;
     if (!active || !document.documentElement) return;
+    if (document.hidden) { observe(); return; }
     lastScan = performance.now();
+    colorCache.clear();
+    contrastCache.clear();foregroundCache.clear();
     observer?.disconnect();
     // Measure settled site colors rather than a CSS transition's middle frame.
     document.documentElement.setAttribute('data-pb-measuring','');
@@ -151,15 +186,26 @@
     const surface = new WeakMap();
     const originalSurface = new WeakMap();
     const adaptedIcons=new Set();
-    for (const el of document.querySelectorAll('*')) {
-      if (el.hasAttribute('data-pb-ui')) continue;
+    // Keep the player's own text paints so ancestor recoloring cannot leak in.
+    // Its video, translucent overlays, gradients and controls remain untouched.
+    if(youtubeHost)for(const player of document.querySelectorAll('.html5-video-player')){
+      const style=getComputedStyle(player);
+      decisions.push([player,['data-pb-fg','data-pb-fill'],[['--pb-local-text',style.color],['--pb-local-fill',style.webkitTextFillColor===style.color?'currentColor':style.webkitTextFillColor]]]);
+    }
+    // Prune independent media/UI subtrees instead of allocating and visiting a
+    // flat list of every descendant on each pass.
+    const walker=document.createTreeWalker(document,NodeFilter.SHOW_ELEMENT,{acceptNode:el=>
+      el.hasAttribute('data-pb-ui')||(youtubeHost&&el.matches('.html5-video-player'))?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT
+    });
+    for(let el=walker.nextNode();el;el=walker.nextNode()) {
       if(el.matches('img')) {
-        const rect=el.getBoundingClientRect(),source=el.currentSrc||el.src;
-        const parent=surface.get(el.parentElement)||{bg:palette.bg,known:true};
+        const source=el.currentSrc||el.src;
         // This site's footer cat is an external SVG image rather than inline
         // markup. A halo works without reading cross-origin pixels or recoloring it.
         const knownDarkLogo=location.hostname==='music-theory.aizcutei.com'&&source==='https://soundquest.jp/files/svg/logo_plugmon_monster.svg';
-        if(rect.width>0&&rect.width<=128&&rect.height>0&&rect.height<=128&&parent.known&&(knownDarkLogo||/\.png(?:$|[?#])|^data:image\/png/i.test(source))) {
+        if(!knownDarkLogo&&!/\.png(?:$|[?#])|^data:image\/png/i.test(source))continue;
+        const rect=el.getBoundingClientRect(),parent=surface.get(el.parentElement)||{bg:palette.bg,known:true};
+        if(rect.width>0&&rect.width<=128&&rect.height>0&&rect.height<=128&&parent.known) {
           const samples=sampleRaster(el),bg=visibleBackground(getComputedStyle(el),parent.bg,false).bg;
           if(foreground(bg)==='#e8e8e8'&&(knownDarkLogo||(samples&&samples.filter(c=>needsLight(c,bg)).length/samples.length>.6))) {
             const original=getComputedStyle(el).filter;
@@ -187,9 +233,7 @@
       const style = getComputedStyle(el);
       const bg = color(style.backgroundColor), fg = color(style.color);
       const ownSurface = bg && bg.a >= .5;
-      // Youdao uses a pale decorative PNG across the translation workspace.
-      // Treat only that known wallpaper as a surface; keep actual media intact.
-      const wallpaper = location.hostname === 'fanyi.youdao.com' && el.matches('.web-frame-content-scroll-container.index-bg');
+      const wallpaper = surfaceWallpaper(el, style);
       const flattenGradient=neutralGradient(style);
       const hasImage = style.backgroundImage !== 'none' && !wallpaper && !flattenGradient;
       const parent = svgText ? el.closest('svg').parentElement : el.parentElement;
@@ -202,6 +246,9 @@
       if (wallpaper) flags.push('data-pb-wallpaper', 'data-pb-bg');
       if (changeBg) flags.push(attrs[0]);
       const resolved=visibleBackground(style,parentSurface.bg,changeBg,wallpaper);
+      // Section headings share the index sprite, but only paint a small red
+      // decoration. Their text sits on the parent surface, not on a photo.
+      if(location.hostname==='music.163.com'&&el.matches('.v-hd2')&&/^url\("https?:\/\/s[\d]+\.music\.126\.net\/style\/web2\/img\/index\/index\.png(?:\?[^"\s]*)?"\)$/.test(style.backgroundImage))resolved.known=parentSurface.known;
       if(!ownSurface&&!hasImage&&!parentSurface.known)resolved.known=false;
       surface.set(el,resolved);
       const preserveSurface=!changeBg&&!wallpaper&&(hasImage||(!neutral(bg)&&ownSurface)||parentSurface.preserve);
@@ -249,31 +296,47 @@
         borders(ps, flags, pseudoSurface.known, `-${pseudo}`,pseudoSurface.bg,paints);
       }
       borders(style, flags, resolved.known,'',resolved.bg,paints);
-      const smallIcon = !el.textContent.trim() && parseFloat(style.width) <= 24 && parseFloat(style.height) <= 24;
-      if (settings.shadows && !preserveSurface && !smallIcon && (style.boxShadow !== 'none' || style.textShadow !== 'none')) flags.push(attrs[3]);
+      if (settings.shadows && !preserveSurface && (style.boxShadow !== 'none' || style.textShadow !== 'none')) {
+        const smallIcon = !el.textContent.trim() && parseFloat(style.width) <= 24 && parseFloat(style.height) <= 24;
+        if(!smallIcon)flags.push(attrs[3]);
+      }
       if (flags.length) decisions.push([el, flags, paints]);
     }
     for (const [el, flags, paints] of decisions) {
       for (const attr of flags) el.setAttribute(attr, '');
       applyPaints(el,paints);
-      marked.add(el);
+      marked.set(el,flags);
     }
     void document.documentElement.offsetHeight;
     document.documentElement.removeAttribute('data-pb-measuring');
     observe();
   }
   function schedule() {
-    if (active && !timer) timer = setTimeout(scan, Math.max(120, 700 - (performance.now() - lastScan)));
+    if (active && !document.hidden && !timer) timer = setTimeout(scan, Math.max(120, 700 - (performance.now() - lastScan)));
+  }
+  function protectedRegion(el) {
+    return el.closest('[data-pb-ui]')||(youtubeHost&&el.closest('.html5-video-player'));
+  }
+  function relevantMutation(record) {
+    const el=record.target.nodeType===Node.ELEMENT_NODE?record.target:record.target.parentElement;
+    if(!el?.isConnected||protectedRegion(el))return false;
+    // Existing text changing from "1" to "2" doesn't change its paints. Keep
+    // empty/non-empty transitions and stylesheet edits, which can affect CSS.
+    if(record.type==='characterData'&&!el.closest('style')){
+      const before=record.oldValue||'', after=record.target.textContent||'';
+      return (before.length===0)!==(after.length===0)||Boolean(before.trim())!==Boolean(after.trim());
+    }
+    return true;
   }
   function observe() {
     if (active && document.documentElement) observer.observe(document.documentElement, {
-      subtree: true, childList: true, characterData: true, attributes: true,
+      subtree: true, childList: true, characterData: true, characterDataOldValue: true, attributes: true,
       attributeFilter: ['class', 'style', 'data-theme', 'data-color-mode', 'href', 'src', 'srcset']
     });
   }
   function apply(values) {
     settings = { ...defaults, ...(values.preferences || {}), mode: 'full' };
-    active = settings.enabled && values[siteKey] !== false;
+    active = settings.enabled && values[siteKey] !== false && !youtubeEmbed;
     observer?.disconnect();
     clearTimeout(timer); timer = null;
     clearMarks();
@@ -297,14 +360,14 @@
   }
   async function reload(animate=false) { update(await chrome.storage.local.get(['preferences', siteKey]),animate); }
   async function start() {
-    observer = new MutationObserver(schedule);
+    observer = new MutationObserver(records=>{if(records.some(relevantMutation))schedule();});
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (sender.id !== chrome.runtime.id) return;
       if (message?.type === 'pb-preview') {
         clearTimeout(reloadTimer); reloadTimer=null;
         void chrome.storage.local.get(['preferences',siteKey]).then(values => {
           update({...values,preferences:message.preferences},true);
-          sendResponse({ok:true,version:'1.8.1',active,background:palette.background});
+          sendResponse({ok:true,version:'1.8.2',active,background:palette.background});
         });
         return true;
       }
@@ -324,10 +387,14 @@
         clearTimeout(reloadTimer); reloadTimer = null; void reload(true);
       } else if (changes.preferences && !reloadTimer) reloadTimer = setTimeout(() => { reloadTimer=null; void reload(); },80);
     });
-    document.addEventListener('load', schedule, true);
-    document.addEventListener('change', schedule, true);
+    const scheduleEvent=event=>{if(!(event.target instanceof Element)||!protectedRegion(event.target))schedule();};
+    document.addEventListener('load', scheduleEvent, true);
+    document.addEventListener('change', scheduleEvent, true);
     window.addEventListener('resize', schedule);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) schedule(); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { clearTimeout(timer); timer=null; }
+      else schedule();
+    });
   }
   if (document.documentElement) void start();
   else document.addEventListener('DOMContentLoaded', start, { once: true });

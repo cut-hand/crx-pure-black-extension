@@ -1,4 +1,27 @@
 html[data-pb-active="full"], html[data-pb-active="full"] body { background-color: var(--pb-background, #000000) !important; color-scheme: var(--pb-color-scheme, dark) !important; }
+/* Devsite renders the language button/menu inside a shadow root. Its public
+   color tokens cross that boundary without scanning or altering media trees. */
+html[data-pb-active="full"] devsite-language-selector {
+  --devsite-background-1:var(--pb-background)!important;
+  --devsite-select-background-color:var(--pb-background)!important;
+  --devsite-select-background-color-hover:var(--pb-background)!important;
+  --devsite-primary-text-color:var(--pb-foreground)!important;
+  --devsite-secondary-text-color:var(--pb-foreground)!important;
+  --devsite-select-color:var(--pb-foreground)!important;
+  --devsite-select-border:1px solid var(--pb-border)!important;
+  --devsite-list-border:1px solid var(--pb-border)!important;
+}
+/* The appearance selector has its own shadow tree and separate public tokens,
+   including hovered and selected surfaces. Keep those in the same palette. */
+html[data-pb-active="full"] devsite-appearance-selector {
+  --devsite-appearance-selector-toggle-color:var(--pb-foreground)!important;
+  --devsite-appearance-selector-toggle-background-hover:color-mix(in srgb,var(--pb-background) 88%,var(--pb-foreground))!important;
+  --devsite-appearance-selector-menu-background:var(--pb-background)!important;
+  --devsite-appearance-selector-menu-color:var(--pb-foreground)!important;
+  --devsite-appearance-selector-menu-background-hover:color-mix(in srgb,var(--pb-background) 88%,var(--pb-foreground))!important;
+  --devsite-appearance-selector-menu-background-selected:color-mix(in srgb,var(--pb-background) 88%,var(--pb-foreground))!important;
+  --devsite-list-border:1px solid var(--pb-border)!important;
+}
 html[data-pb-measuring] *, html[data-pb-measuring] *::before, html[data-pb-measuring] *::after { transition:none!important; }
 /* Boost specificity to cover site ID selectors with !important text colors. */
 :is(#__pb1#__pb2#__pb3, [data-pb-icon]) { color:var(--pb-icon-color)!important;filter:var(--pb-icon-filter)!important; }
